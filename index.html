@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ADMINISTRADOR | ACESSO GLOBAL</title>
+    <title>ADMINISTRADOR | SISTEMA_AP_001</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -22,7 +22,7 @@
     </div>
 
     <div class="bg-ap-red text-white font-bold text-center py-3 mb-6 rounded-lg shadow-lg">
-        🛡️ PAINEL ADM | CONEXÃO GLOBAL
+        🛡️ PAINEL ADM 
         <br><span id="statusConn" class="text-yellow-300">🔄 CONECTANDO...</span>
     </div>
 
@@ -31,7 +31,7 @@
             <div class="bg-ap-gray rounded-xl border border-ap-primary/20 p-4 shadow-xl">
                 <h2 class="text-xl font-bold text-ap-orange mb-4">👤 CLIENTES ONLINE <span id="qtd">(0)</span></h2>
                 <div id="listaClientes" class="space-y-2 text-sm max-h-[350px] overflow-y-auto">
-                    <div class="text-gray-500 text-center">Aguardando dados...</div>
+                    <div class="text-gray-500 text-center">Aguardando...</div>
                 </div>
             </div>
 
@@ -69,52 +69,40 @@
         function entrarSistema() {
             meuNome = document.getElementById('nomeAdm').value || "ADM";
             document.getElementById('telaNome').remove();
-            conectarGlobal();
+            conectar();
         }
 
-        function conectarGlobal() {
-            // ⚠️ CONEXÃO GLOBAL - FUNCIONA EM QUALQUER INTERNET
+        function conectar() {
             const peer = new Peer({
-                host: 'peerjs-server.herokuapp.com',
+                host: '0.peerjs.com',
                 port: 443,
                 path: '/',
                 secure: true,
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
-                    ]
-                }
+                config: { iceServers: [{urls:'stun:stun.l.google.com:19302'}] }
             });
 
             peer.on('open', () => {
-                conn = peer.connect(ID_ALVO, {
-                    reliable: true,
-                    host: 'peerjs-server.herokuapp.com',
-                    port: 443,
-                    path: '/',
-                    secure: true
-                });
+                conn = peer.connect(ID_ALVO, { reliable:true, host:'0.peerjs.com', port:443, path:'/', secure:true });
 
                 conn.on('open', () => {
                     document.getElementById('statusConn').className = 'text-green-400';
-                    document.getElementById('statusConn').textContent = '✅ CONECTADO (QUALQUER REDE)';
+                    document.getElementById('statusConn').textContent = '✅ CONECTADO';
                     conn.send({tipo:"cadastrar_usuario",idUnico:Math.random().toString(36).substr(2,8), nomeEscolhido:meuNome, tipoUsuario:"adm"});
                 });
 
-                // ✅ RECEBE LISTA DE CLIENTES NA HORA
+                // ✅ AQUI É O CORAÇÃO: RECEBE TUDO DO HOST
                 conn.on('data', (dados) => {
-                    if(dados.tipo === "atualizacao_completa") {
+                    if(dados.tipo === "atualizacao_total") {
                         listaGeral = dados.lista;
                         historicoGeral = dados.historico;
-                        atualizarTelaToda(); // TUDO ATUALIZA AQUI
+                        atualizarTelaToda(); // ATUALIZA TUDO NA HORA
                     }
                 });
 
-                conn.on('close', () => setTimeout(conectarGlobal, 3000));
+                conn.on('close', () => setTimeout(conectar, 2000));
             });
 
-            peer.on('error', () => setTimeout(conectarGlobal, 3000));
+            peer.on('error', () => setTimeout(conectar, 2000));
         }
 
         function atualizarTelaToda() {
@@ -123,6 +111,7 @@
             if(clienteAtual) carregarChat();
         }
 
+        // ✅ LISTA DE CLIENTES ONLINE (FUNCIONANDO 100%)
         function atualizarListaClientes() {
             const el = document.getElementById('listaClientes');
             const clientes = listaGeral.filter(u => u.tipo === "cliente");
@@ -130,8 +119,10 @@
             el.innerHTML = clientes.length ? '' : '<div class="text-gray-500 text-center py-4">Nenhum cliente online</div>';
             
             clientes.forEach(u => {
+                let statusCor = u.status === 'pago' ? 'text-green-400' : u.status === 'analise' ? 'text-yellow-400' : 'text-gray-300';
                 el.innerHTML += `<div onclick="selecionarCliente('${u.id}')" class="p-2 bg-black/40 rounded border-l-2 border-green-500 cursor-pointer hover:bg-black/60" id="cli-${u.id}">
-                    <b>${u.nome}</b><br><span class="text-xs">Status: ${u.status}</span>
+                    <b>${u.nome}</b><br>
+                    <span class="text-xs ${statusCor}">${u.status} | ${u.modo} R$${u.valor}</span>
                     <div class="mt-1">
                         <button onclick="event.stopPropagation(); aprovar('${u.id}')" class="bg-green-600 text-white px-2 py-0.5 rounded text-xs">✅</button>
                         <button onclick="event.stopPropagation(); rejeitar('${u.id}')" class="bg-red-600 text-white px-2 py-0.5 rounded text-xs">❌</button>
@@ -158,10 +149,14 @@
         function carregarChat() {
             const el = document.getElementById('chat');
             el.innerHTML = '';
-            const conversas = historicoGeral.filter(m => m.remetente === clienteAtual.nome || m.remetente === meuNome);
+            const conversas = historicoGeral.filter(m => m.remetente === clienteAtual.nome || m.remetente === meuNome || m.remetente === "ADM");
             conversas.forEach(m => {
-                if(m.tipo === 'msg') el.innerHTML += `<div class="text-sm py-1 ${m.remetente===meuNome?'text-red-400 text-right':'text-green-300'}"><b>${m.remetente}:</b> ${m.texto}</div>`;
-                if(m.tipo === 'print') el.innerHTML += `<div class="text-sm py-1 text-yellow-400">📸 Enviou comprovante</div>`;
+                if(m.tipo === 'msg') {
+                    el.innerHTML += `<div class="text-sm py-1 ${m.remetente===meuNome?'text-red-400 text-right':'text-green-300'}"><b>${m.remetente}:</b> ${m.texto}</div>`;
+                }
+                if(m.tipo === 'print') {
+                    el.innerHTML += `<div class="text-sm py-1 text-yellow-400 text-center">📸 Enviou comprovante</div>`;
+                }
             });
             el.scrollTop = el.scrollHeight;
         }
@@ -182,10 +177,9 @@
             if(!clienteAtual) return;
             const txt = document.getElementById('msgInput').value.trim();
             if(!txt) return;
-            conn.send({tipo:"enviar_mensagem",idUsuario:clienteAtual.id,texto:txt});
+            conn.send({tipo:"msg_adm_cliente",idAlvo:clienteAtual.id,texto:txt});
             document.getElementById('msgInput').value = "";
         }
     </script>
 </body>
-        </html>
-        
+</html>
